@@ -16,7 +16,7 @@ Läuft als Web-App (PWA) im Browser, auch offline.
 
 1. Die App über HTTPS bereitstellen, z. B. per **GitHub Pages**: Im Repository unter
    *Settings → Pages* als Quelle den Branch `main` und den Ordner `/ (root)` wählen. Die App liegt dann unter
-   `https://johannesmaletius-lgtm.github.io/trink-schnecke/`.
+   `https://johannesmaletius-lgtm.github.io/Trink-Schnecke/`.
 2. Die Adresse in Safari öffnen.
 3. Auf **Teilen** tippen → **Zum Home-Bildschirm** → **Hinzufügen**.
 
