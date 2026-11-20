@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trink-Schnecke</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Trinkspiel-Brett als Schnecke: würfeln und im Uhrzeigersinn nach innen bis ins Ziel.">
+<meta name="theme-color" content="#dfe3dc">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Schnecke">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Kalam:wght@400;700&display=swap">
+<style>
+/* Layout: Steuerleiste (wer ist dran + Würfel) über dem Brett; Brett 7×5 quer bzw. 5×7 im Hochformat; Spieler und Regeln darunter */
+:root {
+  --bg: #dfe3dc;
+  --fg: #1d2126;
+  --muted: #5b636b;
+  --panel: #f6f7f4;
+  --line: #c3c9c1;
+  --accent: #d6342b;
+
+  /* Brett: bewusst immer hell, wie der echte Tisch */
+  --board-frame: #c9ced2;
+  --cell: #ecedea;
+  --chevron: rgba(120,128,120,.10);
+  --ink-black: #16181b;
+  --ink-red: #d6342b;
+  --ink-orange: #ec7a1c;
+  --ink-blue: #2458c4;
+  --ink-navy: #1e2b66;
+  --ink-teal: #12857f;
+  --hilite: rgba(247, 205, 30, .55);
+
+  --font-marker: "Permanent Marker", "Comic Sans MS", "Marker Felt", cursive;
+  --font-hand: "Kalam", "Comic Sans MS", "Segoe Print", cursive;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181b; --fg: #e8eae6; --muted: #9aa29b; --panel: #1f2327; --line: #343a3f; --accent: #ff6b5c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181b; --fg: #e8eae6; --muted: #9aa29b; --panel: #1f2327; --line: #343a3f; --accent: #ff6b5c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(40px, env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 {
+  font-family: var(--font-marker);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  margin: 0;
+  line-height: 1;
+}
+h1 span { color: var(--accent); }
+.lede { margin: 0; color: var(--muted); font-size: .92rem; max-width: 52ch; }
+
+/* ---------- Steuerleiste ---------- */
+.control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px 12px 18px;
+}
+.turn { min-width: 0; display: grid; gap: 2px; }
+.turn small { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
+.turn-name {
+  font-family: var(--font-marker);
+  font-size: clamp(1.4rem, 4.2vw, 2rem);
+  line-height: 1.1;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+}
+.turn-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-dot { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink-black); }
+.turn-hint { color: var(--muted); font-size: .9rem; min-height: 1.3em; }
+.dice-wrap { display: flex; align-items: center; gap: 12px; flex: none; }
+
+.die {
+  all: unset;
+  cursor: pointer;
+  width: 76px; height: 76px;
+  background: #fbfbf8;
+  border: 3px solid var(--ink-black);
+  border-radius: 16px;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 10px;
+  box-sizing: border-box;
+  box-shadow: 0 5px 0 var(--ink-black);
+  transition: transform .08s;
+}
+.die:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink-black); }
+.die:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.die[aria-disabled="true"] { opacity: .55; cursor: default; }
+.pip { width: 14px; height: 14px; border-radius: 50%; background: var(--ink-red); place-self: center; visibility: hidden; }
+.pip.on { visibility: visible; }
+.die.rolling { animation: wobble .5s ease-in-out; }
+@keyframes wobble { 0% { transform: rotate(0) } 25% { transform: rotate(-14deg) } 60% { transform: rotate(10deg) } 100% { transform: rotate(0) } }
+
+/* ---------- Brett ---------- */
+.board-frame {
+  background: var(--board-frame);
+  padding: 10px;
+  border-radius: 22px;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.6), 0 18px 40px -18px rgba(0,0,0,.45);
+}
+.board {
+  --k: 1;
+  container-type: inline-size;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  aspect-ratio: calc(var(--cols) * 1.12) / var(--rows);
+  max-width: 100%;
+  background-color: var(--cell);
+  background-image:
+    repeating-linear-gradient(45deg, var(--chevron) 0 6px, transparent 6px 14px),
+    repeating-linear-gradient(-45deg, var(--chevron) 0 6px, transparent 6px 14px);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.board.portrait {
+  --k: 1.5;
+  aspect-ratio: var(--cols) / calc(var(--rows) * 1.18);
+}
+.cell {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(.3cqw * var(--k));
+  padding: calc(1.1cqw * var(--k)) calc(.7cqw * var(--k));
+  text-align: center;
+  cursor: pointer;
+  color: var(--ink-black);
+  overflow: hidden;
+  transition: background-color .15s;
+}
+.cell:hover { background-color: rgba(255,255,255,.55); }
+.cell:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: -6px; border-radius: 6px; }
+.cell.is-hit { animation: hit 1.4s ease-out; }
+@keyframes hit { 0%,30% { background-color: rgba(247,205,30,.75); } 100% { background-color: transparent; } }
+
+.num {
+  position: absolute;
+  top: calc(.5cqw * var(--k)); left: calc(.7cqw * var(--k));
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: max(9px, calc(1.05cqw * var(--k)));
+  line-height: 1;
+  color: rgba(22,24,27,.45);
+}
+.t {
+  font-family: var(--font-marker);
+  font-size: max(10px, calc(var(--fs, 2.2) * var(--k) * 1cqw));
+  line-height: 1.02;
+  transform: rotate(var(--rot, 0deg));
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  hyphens: manual;
+  color: var(--ink, var(--ink-black));
+}
+.t mark {
+  background: linear-gradient(transparent 52%, var(--hilite) 52% 92%, transparent 92%);
+  color: inherit;
+  padding: 0 .2em;
+}
+.s {
+  font-family: var(--font-hand);
+  font-size: max(9px, calc(1.32cqw * var(--k)));
+  line-height: 1.1;
+  color: var(--sub, var(--ink-navy));
+  text-wrap: balance;
+}
+.tag {
+  position: absolute;
+  bottom: calc(.5cqw * var(--k)); right: calc(.6cqw * var(--k));
+  font-family: var(--font-hand);
+  font-size: max(8px, calc(.95cqw * var(--k)));
+  color: var(--ink-teal);
+  border: 1px dashed var(--ink-teal);
+  border-radius: 99px;
+  padding: 0 .4em;
+  line-height: 1.4;
+}
+.cell.suggest { background-color: rgba(18,133,127,.06); }
+.board.portrait .s { display: none; }
+.board.portrait .tag { display: none; }
+
+.cell.start .t { font-size: calc(3.4cqw * var(--k)); letter-spacing: .05em; }
+.cell.start .arrow { font-family: var(--font-marker); font-size: calc(3cqw * var(--k)); color: var(--ink-red); line-height: .8; }
+.cell.goal .t { font-size: calc(3.6cqw * var(--k)); color: var(--ink-navy); }
+.flag { width: calc(5.2cqw * var(--k)); height: auto; transform: rotate(-8deg); }
+
+.tokens {
+  position: absolute;
+  left: calc(.6cqw * var(--k)); bottom: calc(.6cqw * var(--k));
+  display: flex; flex-wrap: wrap; gap: 2px;
+  max-width: 70%;
+  pointer-events: none;
+  z-index: 2;
+}
+.tok {
+  width: calc(2.1cqw * var(--k)); height: calc(2.1cqw * var(--k));
+  min-width: 12px; min-height: 12px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1.5px var(--ink-black), 0 2px 3px rgba(0,0,0,.35);
+}
+.tok.active { animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
+
+.walls { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+/* ---------- Unter dem Brett ---------- */
+.below {
+  display: grid;
+  grid-template-columns: minmax(260px, 380px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 760px) { .below { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.panel h2 {
+  font-family: var(--font-marker);
+  font-weight: 400;
+  font-size: 1.3rem;
+  margin: 0 0 12px;
+}
+.players { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.player { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; }
+.player .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--ink-black); }
+.player.is-turn .dot { box-shadow: 0 0 0 1.5px var(--ink-black), 0 0 0 5px var(--hilite); }
+.player input {
+  min-width: 0;
+  font: 500 1rem var(--font-ui);
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line);
+  border-radius: 6px;
+  padding: 6px 6px;
+}
+.player input:focus { outline: none; border-color: var(--accent); }
+.player .pos { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.player .pos.skip { color: var(--accent); }
+.icon-btn {
+  all: unset; cursor: pointer;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--muted); font-size: 1.2rem;
+}
+.icon-btn:hover { background: var(--line); color: var(--fg); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: 600 .92rem var(--font-ui);
+  border-radius: 99px;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 1.5px solid var(--fg);
+  background: transparent;
+  color: var(--fg);
+}
+.btn.primary { background: var(--fg); color: var(--bg); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.confirm { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .9rem; }
+
+.rules { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; line-height: 1.5; max-width: 70ch; }
+.rules b { font-weight: 650; }
+.legend { margin-top: 12px; color: var(--muted); font-size: .88rem; }
+.tag-demo {
+  font-family: var(--font-hand);
+  color: var(--ink-teal);
+  border: 1px dashed var(--ink-teal);
+  border-radius: 99px;
+  padding: 0 8px;
+  background: var(--cell);
+}
+
+/* ---------- Aufgabenkarte ---------- */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,12,14,.55);
+  display: grid; place-items: center;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  z-index: 50;
+}
+.card {
+  width: min(440px, 100%);
+  background-color: var(--cell);
+  background-image:
+    repeating-linear-gradient(45deg, var(--chevron) 0 6px, transparent 6px 14px),
+    repeating-linear-gradient(-45deg, var(--chevron) 0 6px, transparent 6px 14px);
+  border: 4px solid var(--ink-black);
+  border-radius: 18px;
+  padding: 24px 22px 20px;
+  color: var(--ink-black);
+  text-align: center;
+  display: grid; gap: 12px;
+  animation: pop .22s ease-out;
+}
+@keyframes pop { from { transform: scale(.92); opacity: .4 } to { transform: none; opacity: 1 } }
+.card .who { font: 600 .95rem var(--font-ui); display: flex; justify-content: center; align-items: center; gap: 8px; }
+.card .who i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px var(--ink-black); }
+.card .cnum { font-family: var(--font-hand); font-weight: 700; color: rgba(22,24,27,.5); }
+.card .ct { font-family: var(--font-marker); font-size: 2.1rem; line-height: 1.05; margin: 0; overflow-wrap: anywhere; }
+.card .cd { font-family: var(--font-hand); font-size: 1.22rem; line-height: 1.35; margin: 0; color: var(--ink-navy); }
+.card button {
+  justify-self: center;
+  font: 600 1rem var(--font-ui);
+  background: var(--ink-black); color: #fff;
+  border: 0; border-radius: 99px;
+  padding: 12px 26px; cursor: pointer;
+}
+.card button:focus-visible { outline: 3px solid var(--ink-orange); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .die.rolling, .cell.is-hit, .tok.active, .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trink-<span>Schnecke</span></h1>
+    <p class="lede">Würfeln, im Uhrzeigersinn laufen, Runde für Runde nach innen. Wer zuerst im Ziel ist, gewinnt.</p>
+  </header>
+
+  <section class="control" aria-label="Spielzug">
+    <div class="turn">
+      <small>Am Zug</small>
+      <div class="turn-name"><span class="turn-dot" id="turnDot"></span><span id="turnName">–</span></div>
+      <div class="turn-hint" id="turnHint" aria-live="polite">Würfel antippen</div>
+    </div>
+    <div class="dice-wrap">
+      <button class="die" id="die" type="button" aria-label="Würfeln">
+        <i class="pip"></i><i class="pip"></i><i class="pip"></i>
+        <i class="pip"></i><i class="pip"></i><i class="pip"></i>
+        <i class="pip"></i><i class="pip"></i><i class="pip"></i>
+      </button>
+    </div>
+  </section>
+
+  <div class="board-frame">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="below">
+    <section class="panel" aria-label="Spieler">
+      <h2>Spieler</h2>
+      <ul class="players" id="players"></ul>
+      <div class="btn-row">
+        <button class="btn" type="button" id="addPlayer">+ Spieler</button>
+        <button class="btn" type="button" id="newGame">Neues Spiel</button>
+      </div>
+      <div class="confirm" id="confirmNew" hidden>
+        <span>Alle Figuren zurück auf Start?</span>
+        <button class="btn primary" type="button" id="confirmYes">Ja, neu starten</button>
+        <button class="btn" type="button" id="confirmNo">Abbrechen</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Spielregeln</h2>
+      <ol class="rules">
+        <li>Alle starten auf <b>START</b>. Wer dran ist, würfelt, die Figur läuft automatisch im Uhrzeigersinn.</li>
+        <li>Die Aufgabe auf dem Feld wird sofort gemacht.</li>
+        <li><b>5 Felder zurück</b> und die <b>Leiter</b> (Feld 28 → 13) landen immer auf <b>2 oder 5 Schlücke</b>.</li>
+        <li><b>Neue Regel</b> gilt bis Spielende. Wer sie bricht, trinkt.</li>
+        <li>Wikinger, Question Master und Beleidigungs-Master bleiben aktiv, bis jemand anderes auf dem Feld landet.</li>
+        <li>Wer zuerst das <b>ZIEL</b> erreicht, gewinnt. Exakt treffen muss man nicht.</li>
+      </ol>
+      <p class="legend"><span class="tag-demo">Vorschlag</span> = ergänzt, damit die Schnecke voll wird. Jedes Feld lässt sich antippen.</p>
+    </section>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+    <div class="who" id="cWho" hidden><i id="cWhoDot"></i><span id="cWhoName"></span></div>
+    <span class="cnum" id="cNum"></span>
+    <p class="ct" id="cTitle"></p>
+    <p class="cd" id="cDesc"></p>
+    <button type="button" id="cBtn">Weiter</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---------- Felder in Laufreihenfolge (0 = Start, letztes = Ziel) ----------
+  // ink: Titelfarbe, hl: Textmarker, fs: Schriftgröße, fx: Spielwirkung
+  const FIELDS = [
+    { kind: "start", t: "START", d: "Hier geht's los. Würfeln und im Uhrzeigersinn laufen." },
+    { t: "Alle Girls", s: "trinken!", ink: "red", d: "Alle Mädels trinken." },
+    { t: "2 Schlücke", s: "trink!", ink: "blue", hl: true, d: "Trink 2 Schlücke." },
+    { t: "Ich packe meinen Koffer", s: "…und nehme mit", ink: "orange", fs: 1.65, d: "Reihum: „Ich packe meinen Koffer und nehme mit …“ und jedes Mal einen Gegenstand dazu. Wer sich verhaspelt, trinkt." },
+    { t: "Wikinger", s: "Hörner hoch, alle rudern!", ink: "navy", fs: 2.3, d: "Du bist Wikinger, bis jemand anderes hier landet. Mach jederzeit Hörner: Deine Nachbarn links und rechts rudern, alle anderen machen mit. Wer zuletzt reagiert, trinkt." },
+    { t: "Alle über 24", s: "trinken!", ink: "red", d: "Alle, die älter als 24 sind, trinken." },
+    { t: "Hose tauschen", s: "mit wem du willst", ink: "orange", hl: true, d: "Tausch die Hose mit einem Mitspieler deiner Wahl. Wer sich weigert, trinkt 5 Schlücke." },
+    { t: "5 Felder zurück", s: "ups.", ink: "red", fs: 2, fx: "back5", d: "Geh 5 Felder zurück und trink dort deine Schlücke." },
+    { t: "Question Master", s: "Antwort = trinken", ink: "blue", fs: 1.95, d: "Du bist Question Master, bis jemand anderes hier landet. Wer dir eine Frage beantwortet, trinkt." },
+    { t: "Trink-Buddy", s: "trinkt ab jetzt mit dir", ink: "teal", d: "Such dir einen Trink-Buddy. Immer wenn du trinkst, trinkt dein Buddy mit." },
+    { t: "Alle Lehrer", s: "trinken!", ink: "navy", d: "Alle Lehrerinnen und Lehrer (auch zukünftige) trinken." },
+    { t: "What are the Chances?", s: "1 bis 10", ink: "orange", fs: 1.7, d: "Gib jemandem eine Aufgabe. Die Person sagt, wie hoch die Chance ist (1–10). Auf 3 sagt ihr beide gleichzeitig eine Zahl. Gleiche Zahl: Aufgabe muss gemacht werden." },
+    { t: "Safe", s: "durchatmen, hier passiert nix", ink: "blue", fs: 3, suggest: true, d: "Glück gehabt. Hier passiert nichts." },
+    { t: "5 Schlücke", s: "trink!", ink: "red", fs: 2.5, d: "Trink 5 Schlücke." },
+    { t: "Stirn&shy;raten", s: "alle spielen mit", ink: "navy", d: "Jeder bekommt einen Begriff auf die Stirn. Reihum Ja/Nein-Fragen. Wer als Letztes errät, trinkt." },
+    { t: "Neue Regel", s: "gilt bis zum Schluss", ink: "red", hl: true, d: "Stell eine neue Regel auf. Sie gilt bis Spielende, wer sie bricht, trinkt." },
+    { t: "Alle Jungs", s: "trinken!", ink: "blue", d: "Alle Jungs trinken." },
+    { t: "Kategorie", s: "wer nix weiß, trinkt", ink: "orange", d: "Nenne eine Kategorie (z. B. Biermarken). Reihum nennt jeder etwas dazu. Wer stockt oder wiederholt, trinkt." },
+    { t: "Platz tauschen", s: "mit wem du willst", ink: "teal", d: "Tausch den Platz mit einem Mitspieler deiner Wahl." },
+    { t: "Beleidi&shy;gungs-Master", s: "zurückmotzen = trinken", ink: "red", fs: 1.6, d: "Du bist Beleidigungs-Master, bis jemand anderes hier landet. Du darfst alle (liebevoll) roasten. Wer zurückbeleidigt, trinkt." },
+    { t: "2 Schlücke", s: "trink!", ink: "orange", hl: true, d: "Trink 2 Schlücke." },
+    { t: "Aussetzen", s: "1 Runde Pause", ink: "navy", fx: "skip", d: "Du setzt in der nächsten Runde aus." },
+    { t: "Nochmal würfeln", s: "", ink: "orange", fs: 2, suggest: true, fx: "again", d: "Würfel direkt nochmal." },
+    { t: "Alle Nicht-Lehrer", s: "trinken!", ink: "teal", fs: 1.8, d: "Alle, die keine Lehrer sind, trinken." },
+    { t: "Sport&shy;aufgabe", s: "bekommst du von links", ink: "red", d: "Dein linker Nachbar gibt dir eine Sportaufgabe. Schaffst du sie nicht, trinkst du." },
+    { t: "5 Felder zurück", s: "nochmal ups.", ink: "red", fs: 2, fx: "back5", d: "Geh 5 Felder zurück und trink dort deine Schlücke." },
+    { t: "Wer bin ich?", s: "nur du rätst", ink: "blue", d: "Die anderen geben dir eine Person. Du stellst Ja/Nein-Fragen. Für jedes Nein trinkst du einen Schluck." },
+    { t: "Wasser&shy;fall", s: "du hörst als Erstes auf", ink: "blue", hl: true, d: "Alle fangen gleichzeitig an zu trinken. Du darfst als Erstes aufhören, dann dein linker Nachbar und so weiter." },
+    { kind: "ladder", t: "Leiter", s: "rutsch eine Reihe runter", ink: "navy", fx: "ladder", to: 13, d: "Rutsch die Leiter runter auf Feld 13 und trink dort deine Schlücke." },
+    { t: "Alle zeigen", s: "Wer würde am ehesten…?", ink: "teal", d: "Stell eine „Wer würde am ehesten…?“-Frage. Auf 3 zeigen alle auf eine Person. Für jeden Finger auf dich trinkst du einen Schluck." },
+    { t: "Neue Regel", s: "gilt bis zum Schluss", ink: "red", hl: true, d: "Stell eine neue Regel auf. Sie gilt bis Spielende, wer sie bricht, trinkt." },
+    { t: "5 Schlücke", s: "trink!", ink: "blue", fs: 2.5, d: "Trink 5 Schlücke." },
+    { t: "Verteil 3 Schlücke", s: "", ink: "orange", fs: 1.9, suggest: true, d: "Verteil 3 Schlücke, wie du willst." },
+    { t: "Trink bis der Nächste fertig ist", s: "", ink: "red", fs: 1.5, d: "Du trinkst so lange, bis der nächste Spieler seinen Zug fertig hat." },
+    { kind: "goal", t: "ZIEL", fx: "goal", d: "Geschafft! Du hast gewonnen und darfst zur Feier 5 Schlücke verteilen." }
+  ];
+  const GOAL = FIELDS.length - 1;
+  const inks = { red: "var(--ink-red)", orange: "var(--ink-orange)", blue: "var(--ink-blue)", navy: "var(--ink-navy)", teal: "var(--ink-teal)" };
+  const COLORS = ["#e63946", "#1d63d6", "#f4c20d", "#1f9d55", "#8e44ad", "#ff7eb6", "#ff8a00", "#2b2d31"];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sleep = ms => new Promise(r => setTimeout(r, reduced ? Math.min(ms, 60) : ms));
+  const plain = html => html.replace(/&shy;/g, "");
+
+  // ---------- Zustand ----------
+  const KEY = "trink-schnecke-v1";
+  let state = load() || fresh(["Spieler 1", "Spieler 2"]);
+  function fresh(names) {
+    return { players: names.map((n, i) => ({ name: n, color: COLORS[i % COLORS.length], pos: 0, skip: false })), turn: 0, winner: null };
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.players) && s.players.length) return s;
+    } catch (e) {}
+    return null;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  let busy = false;
+
+  // ---------- Brett ----------
+  const board = document.getElementById("board");
+  let cells = [];
+  const portraitMQ = matchMedia("(max-width: 700px) and (orientation: portrait)");
+
+  function spiral(cols, rows) {
+    const out = [], seen = new Set();
+    const dirs = [[1,0],[0,1],[-1,0],[0,-1]];
+    let x = 0, y = 0, d = 0;
+    for (let i = 0; i < cols * rows; i++) {
+      out.push([x, y]); seen.add(x + "," + y);
+      let nx = x + dirs[d][0], ny = y + dirs[d][1];
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || seen.has(nx + "," + ny)) {
+        d = (d + 1) % 4; nx = x + dirs[d][0]; ny = y + dirs[d][1];
+      }
+      x = nx; y = ny;
+    }
+    return out;
+  }
+  const rot = i => (((i * 37) % 7) - 3) * 0.9;
+
+  function flagSvg() {
+    let sq = "";
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++)
+      if ((r + c) % 2 === 0) sq += `<rect x="${8 + c * 7}" y="${4 + r * 7}" width="7" height="7" fill="#16181b"/>`;
+    return `<svg class="flag" viewBox="0 0 54 64" aria-hidden="true">
+      <rect x="8" y="4" width="42" height="28" fill="#fff" stroke="#16181b" stroke-width="2"/>${sq}
+      <line x1="8" y1="2" x2="8" y2="62" stroke="#16181b" stroke-width="4" stroke-linecap="round"/></svg>`;
+  }
+
+  function buildBoard() {
+    const portrait = portraitMQ.matches;
+    const COLS = portrait ? 5 : 7, ROWS = portrait ? 7 : 5;
+    board.classList.toggle("portrait", portrait);
+    board.style.setProperty("--cols", COLS);
+    board.style.setProperty("--rows", ROWS);
+    board.innerHTML = "";
+    const path = spiral(COLS, ROWS);
+    const idxAt = {};
+    path.forEach(([x, y], i) => idxAt[x + "," + y] = i);
+
+    cells = FIELDS.map((f, i) => {
+      const [x, y] = path[i];
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "cell" + (f.kind ? " " + f.kind : "") + (f.suggest ? " suggest" : "");
+      el.style.gridColumn = x + 1;
+      el.style.gridRow = y + 1;
+      el.style.setProperty("--rot", rot(i) + "deg");
+      if (f.ink) el.style.setProperty("--ink", inks[f.ink]);
+      if (f.fs) el.style.setProperty("--fs", f.fs);
+      let html;
+      if (f.kind === "start") html = `<span class="t">START</span><span class="arrow" aria-hidden="true">→</span>`;
+      else if (f.kind === "goal") html = `${flagSvg()}<span class="t">ZIEL</span>`;
+      else {
+        html = `<span class="num">${i}</span><span class="t">${f.hl ? `<mark>${f.t}</mark>` : f.t}</span>`;
+        if (f.s) html += `<span class="s">${f.s}</span>`;
+        if (f.suggest) html += `<span class="tag">Vorschlag</span>`;
+      }
+      el.innerHTML = html + `<span class="tokens"></span>`;
+      el.setAttribute("aria-label", (i && i !== GOAL ? "Feld " + i + ": " : "") + plain(f.t));
+      el.addEventListener("click", () => { if (!busy) showCard(i, null); });
+      board.appendChild(el);
+      return el;
+    });
+
+    // Wände: dicker Strich, wo zwei Nachbarfelder nicht direkt aufeinander folgen
+    const cw = 100 / COLS, ch = 100 / ROWS;
+    const seg = (x1, y1, x2, y2, wall) => wall
+      ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#16181b" stroke-linecap="round" vector-effect="non-scaling-stroke" style="stroke-width:5px"/>`
+      : `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#16181b" stroke-opacity=".35" vector-effect="non-scaling-stroke" style="stroke-width:1.2px"/>`;
+    let lines = "";
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const i = idxAt[x + "," + y];
+      if (x < COLS - 1) lines += seg((x + 1) * cw, y * ch, (x + 1) * cw, (y + 1) * ch, Math.abs(i - idxAt[(x + 1) + "," + y]) !== 1);
+      if (y < ROWS - 1) lines += seg(x * cw, (y + 1) * ch, (x + 1) * cw, (y + 1) * ch, Math.abs(i - idxAt[x + "," + (y + 1)]) !== 1);
+    }
+
+    // Leiter: vom Leiter-Feld zum Zielfeld (liegt direkt darunter)
+    let ladder = "";
+    const li = FIELDS.findIndex(f => f.kind === "ladder");
+    if (li > -1) {
+      const [ax, ay] = path[li], [bx, by] = path[FIELDS[li].to];
+      const x0 = (ax + 0.86) * cw, ya = (Math.min(ay, by) + 0.22) * ch, yb = (Math.max(ay, by) + 0.55) * ch;
+      const w = 2.2 * (7 / COLS) * 0.75;
+      const st = 'vector-effect="non-scaling-stroke"';
+      let rungs = "";
+      const gap = ch * 0.13;
+      for (let r = ya + gap; r < yb - gap * 0.3; r += gap) rungs += `<line ${st} x1="${x0 - w / 2}" y1="${r}" x2="${x0 + w / 2}" y2="${r}"/>`;
+      ladder = `<g stroke="#7a4a1f" stroke-linecap="round" style="stroke-width:3px">
+          <line ${st} x1="${x0 - w / 2}" y1="${ya}" x2="${x0 - w / 2}" y2="${yb}"/>
+          <line ${st} x1="${x0 + w / 2}" y1="${ya}" x2="${x0 + w / 2}" y2="${yb}"/></g>
+        <g stroke="#7a4a1f" stroke-linecap="round" style="stroke-width:2.2px">${rungs}</g>`;
+    }
+    board.insertAdjacentHTML("beforeend",
+      `<svg class="walls" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}${ladder}</svg>`);
+    renderTokens();
+  }
+
+  function renderTokens() {
+    cells.forEach(c => c.querySelector(".tokens").innerHTML = "");
+    state.players.forEach((p, i) => {
+      const t = document.createElement("i");
+      t.className = "tok" + (i === state.turn && !state.winner ? " active" : "");
+      t.style.setProperty("--c", p.color);
+      t.title = p.name;
+      cells[Math.min(p.pos, GOAL)].querySelector(".tokens").appendChild(t);
+    });
+  }
+
+  // ---------- Spieler ----------
+  const list = document.getElementById("players");
+  const turnName = document.getElementById("turnName"), turnDot = document.getElementById("turnDot"), turnHint = document.getElementById("turnHint");
+
+  function renderPlayers() {
+    list.innerHTML = "";
+    state.players.forEach((p, i) => {
+      const li = document.createElement("li");
+      li.className = "player" + (i === state.turn ? " is-turn" : "");
+      li.style.setProperty("--c", p.color);
+      const posText = p.pos === 0 ? "Start" : p.pos >= GOAL ? "Ziel" : "Feld " + p.pos;
+      li.innerHTML = `<span class="dot"></span>
+        <input id="pname-${i}" type="text" maxlength="20" aria-label="Name Spieler ${i + 1}">
+        <span class="pos${p.skip ? " skip" : ""}">${p.skip ? "setzt aus" : posText}</span>
+        <button class="icon-btn" type="button" aria-label="${p.name} entfernen">×</button>`;
+      const inp = li.querySelector("input");
+      inp.value = p.name;
+      inp.addEventListener("input", () => { p.name = inp.value.trim() || "Spieler " + (i + 1); save(); renderTurn(); });
+      li.querySelector(".icon-btn").addEventListener("click", () => removePlayer(i));
+      li.querySelector(".icon-btn").disabled = state.players.length <= 1;
+      list.appendChild(li);
+    });
+    document.getElementById("addPlayer").disabled = state.players.length >= COLORS.length;
+  }
+  function renderTurn() {
+    const p = state.players[state.turn];
+    if (state.winner) {
+      turnName.textContent = state.winner + " gewinnt!";
+      turnDot.style.background = state.players.find(q => q.name === state.winner)?.color || "#fff";
+      turnHint.textContent = "Neues Spiel starten, um nochmal zu spielen";
+    } else {
+      turnName.textContent = p.name;
+      turnDot.style.background = p.color;
+    }
+    die.setAttribute("aria-disabled", busy || state.winner ? "true" : "false");
+  }
+  function renderAll() { renderPlayers(); renderTurn(); renderTokens(); save(); }
+
+  function removePlayer(i) {
+    if (busy || state.players.length <= 1) return;
+    state.players.splice(i, 1);
+    if (state.turn > i || state.turn >= state.players.length) state.turn = (state.turn - (state.turn > i ? 1 : 0)) % state.players.length;
+    renderAll();
+  }
+  document.getElementById("addPlayer").addEventListener("click", () => {
+    if (state.players.length >= COLORS.length) return;
+    const used = new Set(state.players.map(p => p.color));
+    const color = COLORS.find(c => !used.has(c));
+    state.players.push({ name: "Spieler " + (state.players.length + 1), color, pos: 0, skip: false });
+    renderAll();
+    const inp = document.getElementById("pname-" + (state.players.length - 1));
+    if (inp) { inp.focus(); inp.select(); }
+  });
+  const confirmBox = document.getElementById("confirmNew");
+  document.getElementById("newGame").addEventListener("click", () => { confirmBox.hidden = false; });
+  document.getElementById("confirmNo").addEventListener("click", () => { confirmBox.hidden = true; });
+  document.getElementById("confirmYes").addEventListener("click", () => {
+    confirmBox.hidden = true;
+    state = fresh(state.players.map(p => p.name));
+    turnHint.textContent = "Würfel antippen";
+    renderAll();
+  });
+
+  // ---------- Würfel & Zug ----------
+  const FACES = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+  const die = document.getElementById("die"), pips = die.querySelectorAll(".pip");
+  const showFace = n => pips.forEach((p, k) => p.classList.toggle("on", FACES[n].includes(k)));
+  showFace(5);
+
+  async function rollDie() {
+    die.classList.remove("rolling"); void die.offsetWidth; die.classList.add("rolling");
+    for (let k = 0; k < 8; k++) { showFace(1 + Math.floor(Math.random() * 6)); await sleep(60); }
+    const n = 1 + Math.floor(Math.random() * 6);
+    showFace(n);
+    return n;
+  }
+  async function walk(p, target) {
+    const dir = target > p.pos ? 1 : -1;
+    while (p.pos !== target) { p.pos += dir; renderTokens(); await sleep(220); }
+  }
+  function hit(i) {
+    const c = cells[i];
+    c.classList.remove("is-hit"); void c.offsetWidth; c.classList.add("is-hit");
+  }
+  function nextTurn() {
+    state.turn = (state.turn + 1) % state.players.length;
+    renderAll();
+    const p = state.players[state.turn];
+    turnHint.textContent = p.skip ? p.name + " setzt diese Runde aus" : "Würfel antippen";
+  }
+
+  die.addEventListener("click", async () => {
+    if (busy || state.winner) return;
+    const p = state.players[state.turn];
+    if (p.skip) {
+      p.skip = false;
+      turnHint.textContent = p.name + " hat ausgesetzt";
+      nextTurn();
+      return;
+    }
+    busy = true; renderTurn();
+    const n = await rollDie();
+    turnHint.textContent = p.name + " würfelt eine " + n;
+    await sleep(250);
+    await walk(p, Math.min(p.pos + n, GOAL));
+    await land(p);
+  });
+
+  async function land(p) {
+    hit(p.pos);
+    renderAll();
+    const f = FIELDS[p.pos];
+    const fx = f.fx;
+    const label = fx === "back5" ? "5 Felder zurück" : fx === "ladder" ? "Runterrutschen" : fx === "again" ? "Nochmal würfeln" : fx === "goal" ? "Juhu!" : "Erledigt";
+    await showCard(p.pos, p, label);
+    if (fx === "back5") { await walk(p, Math.max(0, p.pos - 5)); return land(p); }
+    if (fx === "ladder") { p.pos = f.to; renderTokens(); await sleep(350); return land(p); }
+    busy = false;
+    if (fx === "goal") { state.winner = p.name; renderAll(); return; }
+    if (fx === "skip") p.skip = true;
+    if (fx === "again") { turnHint.textContent = p.name + " darf nochmal"; renderAll(); return; }
+    nextTurn();
+  }
+
+  // ---------- Aufgabenkarte ----------
+  const overlay = document.getElementById("overlay");
+  const cWho = document.getElementById("cWho"), cWhoDot = document.getElementById("cWhoDot"), cWhoName = document.getElementById("cWhoName");
+  const cNum = document.getElementById("cNum"), cTitle = document.getElementById("cTitle"), cDesc = document.getElementById("cDesc"), cBtn = document.getElementById("cBtn");
+  let closeResolve = null, lastFocus = null;
+
+  function showCard(i, player, label) {
+    const f = FIELDS[i];
+    lastFocus = document.activeElement;
+    cWho.hidden = !player;
+    if (player) { cWhoDot.style.setProperty("--c", player.color); cWhoName.textContent = player.name + (f.fx === "goal" ? " ist im Ziel!" : " landet auf"); }
+    cNum.textContent = f.kind === "start" || f.kind === "goal" ? "" : "Feld " + i + (f.suggest ? " · Vorschlag" : "");
+    cTitle.innerHTML = f.t;
+    cTitle.style.color = f.ink ? inks[f.ink] : "var(--ink-black)";
+    cDesc.textContent = f.d;
+    cBtn.textContent = label || "Schließen";
+    overlay.hidden = false;
+    cBtn.focus();
+    return new Promise(res => { closeResolve = res; });
+  }
+  function closeCard() {
+    if (overlay.hidden) return;
+    overlay.hidden = true;
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    const r = closeResolve; closeResolve = null; if (r) r();
+  }
+  cBtn.addEventListener("click", closeCard);
+  overlay.addEventListener("click", e => { if (e.target === overlay && !busy) closeCard(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !busy) closeCard(); });
+
+  // ---------- Start ----------
+  buildBoard();
+  renderAll();
+  portraitMQ.addEventListener("change", buildBoard);
+
+  // Offline-Fähigkeit, wenn als eigene Web-App ausgeliefert
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent/.test(location.hostname)) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
